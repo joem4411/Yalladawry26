@@ -517,10 +517,6 @@
                                 <div id="reader" class="w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-black min-h-[300px] md:min-h-[500px]"></div>
                             </div>
                             <div class="mt-8 text-center space-y-4 w-full max-w-sm">
-                                <div id="camera-selection" class="w-full hidden mb-4 text-left">
-                                    <label class="text-[9px] uppercase font-black text-zinc-500 mb-2 block ml-1">Select Camera</label>
-                                    <select id="camera-select" class="input-field text-xs"></select>
-                                </div>
                                 <button id="btn-start-scan" onclick="scannerLogic.start()" class="btn-gold w-full py-4 rounded-xl text-[11px]">Start Camera</button>
                                 <button id="btn-stop-scan" onclick="scannerLogic.stop()" class="btn-outline w-full py-4 rounded-xl text-[11px] hidden">Stop Camera</button>
                                 <p class="text-[9px] text-zinc-500 font-bold uppercase tracking-widest leading-relaxed">Hold PDF pass QR code up to camera.<br>Scanning is automatic.</p>
@@ -1668,66 +1664,39 @@
         };
 
         // --- NEW QR SCANNER LOGIC ---
-        let html5QrCode = null;
+        let html5QrcodeScanner = null;
         const scannerLogic = {
             isScanningPaused: false,
             currentScannedItem: null,
-            cameras: [],
-            initCameras: () => {
-                Html5Qrcode.getCameras().then(devices => {
-                    if (devices && devices.length) {
-                        scannerLogic.cameras = devices;
-                        const select = document.getElementById('camera-select');
-                        select.innerHTML = devices.map(d => `<option value="${d.id}">${d.label || 'Camera ' + d.id}</option>`).join('');
-                        document.getElementById('camera-selection').classList.remove('hidden');
-                    }
-                }).catch(err => {
-                    console.log("Cameras not loaded yet. Will load on start.");
-                });
-            },
             start: () => {
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("reader");
+                if (!html5QrcodeScanner) {
+                    html5QrcodeScanner = new Html5QrcodeScanner(
+                        "reader", 
+                        { fps: 15 }, 
+                        /* verbose= */ false
+                    );
                 }
                 
-                const cameraId = document.getElementById('camera-select')?.value;
-                const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+                document.getElementById('btn-start-scan').classList.add('hidden');
+                document.getElementById('btn-stop-scan').classList.remove('hidden');
 
-                const startPromise = cameraId
-                    ? html5QrCode.start(cameraId, config, scannerLogic.onScanSuccess)
-                    : html5QrCode.start({ facingMode: "environment" }, config, scannerLogic.onScanSuccess);
-
-                startPromise.then(() => {
-                    document.getElementById('btn-start-scan').classList.add('hidden');
-                    document.getElementById('btn-stop-scan').classList.remove('hidden');
-                    document.getElementById('camera-selection').classList.add('opacity-50', 'pointer-events-none');
-                    
-                    // Populate camera list if permissions were just granted
-                    if (scannerLogic.cameras.length === 0) {
-                        scannerLogic.initCameras();
-                    }
-                }).catch(err => {
-                    ui.notify("Camera Error or Permission Denied");
-                    console.error(err);
+                html5QrcodeScanner.render(scannerLogic.onScanSuccess, (err) => {
+                    // Ignore background scan errors
                 });
             },
             stop: () => {
-                if (html5QrCode) {
-                    try {
-                        html5QrCode.stop().then(() => {
-                            document.getElementById('btn-start-scan').classList.remove('hidden');
-                            document.getElementById('btn-stop-scan').classList.add('hidden');
-                            document.getElementById('camera-selection').classList.remove('opacity-50', 'pointer-events-none');
-                        }).catch(e => console.log(e));
-                    } catch(e) {}
+                if (html5QrcodeScanner) {
+                    try { html5QrcodeScanner.clear(); } catch(e){}
                 }
+                document.getElementById('btn-start-scan').classList.remove('hidden');
+                document.getElementById('btn-stop-scan').classList.add('hidden');
             },
             resume: () => {
                 document.getElementById('scan-modal').classList.add('hidden');
                 document.getElementById('scan-modal').classList.remove('flex');
                 
-                if (html5QrCode) {
-                    try { html5QrCode.resume(); } catch(e){}
+                if (html5QrcodeScanner) {
+                    try { html5QrcodeScanner.resume(); } catch(e){}
                 }
                 setTimeout(() => {
                     scannerLogic.isScanningPaused = false;
@@ -1764,8 +1733,8 @@
                 modal.classList.remove('hidden');
                 modal.classList.add('flex'); 
                 
-                if (html5QrCode) {
-                    try { html5QrCode.pause(true); } catch(e){}
+                if (html5QrcodeScanner) {
+                    try { html5QrcodeScanner.pause(true); } catch(e){}
                 }
                 
                 // Audio feedback (beep)
@@ -2856,8 +2825,6 @@
             // If switching away from scanner, stop the camera
             if(appId === 'attendance' && tabId !== 'scanner') {
                 scannerLogic.stop();
-            } else if (appId === 'attendance' && tabId === 'scanner') {
-                scannerLogic.initCameras();
             }
         }
 
