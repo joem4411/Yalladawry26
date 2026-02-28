@@ -378,12 +378,18 @@
                             <div class="glass-card">
                                 <div class="p-6 md:p-8 border-b border-white/5 flex flex-wrap justify-between items-center bg-black/20 gap-4">
                                     <h3 class="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Master Participant Roster</h3>
-                                    <span id="list-count" class="bg-gold/10 text-gold text-[10px] px-3 py-1 rounded-full font-black">0 TOTAL</span>
+                                    <div class="flex items-center gap-3">
+                                        <button id="btn-bulk-edit" onclick="passes.openBulkEdit()" class="hidden bg-gold/20 text-gold hover:bg-gold hover:text-black border border-gold/30 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase transition-colors">Bulk Edit (0)</button>
+                                        <span id="list-count" class="bg-gold/10 text-gold text-[10px] px-3 py-1 rounded-full font-black">0 TOTAL</span>
+                                    </div>
                                 </div>
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-left min-w-[700px]">
                                         <thead class="text-[9px] uppercase text-zinc-500 font-black border-b border-white/5 bg-zinc-900/30">
                                             <tr>
+                                                <th class="px-4 py-5 md:py-6 w-12 text-center">
+                                                    <input type="checkbox" id="selectAllCheckbox" onchange="passes.toggleSelectAll(this)" class="w-4 h-4 accent-gold cursor-pointer">
+                                                </th>
                                                 <th class="px-6 md:px-8 py-5 md:py-6">Participant</th>
                                                 <th class="px-6 md:px-8 py-5 md:py-6">Status/Validity</th>
                                                 <th class="px-6 md:px-8 py-5 md:py-6">NID Reference</th>
@@ -740,6 +746,63 @@
                 <div class="flex flex-col sm:flex-row gap-4 pt-8 md:pt-10">
                     <button onclick="ui.closeGuests()" class="w-full sm:flex-1 py-4 md:py-5 text-[10px] md:text-[11px] font-black text-zinc-600 uppercase hover:text-white transition-colors">Discard</button>
                     <button id="save-guests-btn" class="btn-gold w-full sm:flex-[2] py-4 md:py-5 rounded-xl md:rounded-2xl text-[10px] md:text-[11px]">Save & Authorize</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BULK EDIT MODAL (PASSES) -->
+        <div id="modal-bulk-edit" class="fixed inset-0 bg-black/98 z-[1000] hidden items-center justify-center p-4 sm:p-6 backdrop-blur-3xl">
+            <div class="glass-card w-full max-w-2xl p-6 md:p-12 max-h-[90vh] overflow-y-auto">
+                <h2 class="text-lg md:text-xl font-black text-white uppercase mb-2">Bulk Edit Participants</h2>
+                <p id="bulk-edit-count" class="text-[10px] text-gold font-bold uppercase mb-6"></p>
+
+                <div class="space-y-4 mb-6">
+                    <p class="text-[9px] text-zinc-400 uppercase font-bold tracking-widest mb-2 border-b border-white/5 pb-2">Leave blank to keep current value</p>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] uppercase font-black text-zinc-500 mb-2 block ml-1">Change Squad</label>
+                            <select id="bulk-team" class="input-field">
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-black text-zinc-500 mb-2 block ml-1">Change Category</label>
+                            <select id="bulk-role" class="input-field">
+                                <option value="">-- No Change --</option>
+                                <option value="Player">Player</option>
+                                <option value="Spectator">Spectator</option>
+                                <option value="Organizer">Organizer</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-black text-zinc-500 mb-2 block ml-1">Change Validity</label>
+                            <select id="bulk-validity" class="input-field">
+                                <option value="">-- No Change --</option>
+                                <option value="Full Tournament">Full Tournament</option>
+                                <option value="Day 1">Day 1</option>
+                                <option value="Day 2">Day 2</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-black text-zinc-500 mb-2 block ml-1">Change Payment</label>
+                            <select id="bulk-payment" class="input-field">
+                                <option value="">-- No Change --</option>
+                                <option value="Free">Free Ticket</option>
+                                <option value="Paid">Paid (Money Collected)</option>
+                                <option value="Unpaid">Unpaid (Collect at Door)</option>
+                                <option value="N/A">Not Applicable</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-8 border-t border-white/5 pt-6 mb-6">
+                    <button onclick="passes.bulkRevoke()" class="w-full py-3 bg-red-600/20 text-red-500 text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all rounded-xl border border-red-900/30">Revoke Selected Participants</button>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <button onclick="passes.closeBulkEdit()" class="w-full sm:flex-1 py-4 text-[10px] font-black text-zinc-600 uppercase hover:text-white transition-colors">Cancel</button>
+                    <button onclick="passes.applyBulkEdit()" class="btn-gold w-full sm:flex-[2] py-4 rounded-xl text-[10px]">Apply Changes</button>
                 </div>
             </div>
         </div>
@@ -2123,6 +2186,121 @@
         };
 
         const passes = {
+            selectedUids: [],
+            toggleSelectAll: (checkbox) => {
+                const isChecked = checkbox.checked;
+                const rows = document.querySelectorAll('#pass-table-body tr');
+                
+                if (!isChecked) passes.selectedUids = [];
+                
+                rows.forEach(row => {
+                    if (row.style.display !== 'none') {
+                        const cb = row.querySelector('.row-checkbox');
+                        if (cb) {
+                            cb.checked = isChecked;
+                            if (isChecked && !passes.selectedUids.includes(cb.value)) {
+                                passes.selectedUids.push(cb.value);
+                            }
+                        }
+                    }
+                });
+                passes.updateBulkEditButton();
+            },
+            toggleSelect: (uid, checkbox) => {
+                if(checkbox.checked) {
+                    if(!passes.selectedUids.includes(uid)) passes.selectedUids.push(uid);
+                } else {
+                    passes.selectedUids = passes.selectedUids.filter(id => id !== uid);
+                    document.getElementById('selectAllCheckbox').checked = false;
+                }
+                passes.updateBulkEditButton();
+            },
+            updateBulkEditButton: () => {
+                const btn = document.getElementById('btn-bulk-edit');
+                if(passes.selectedUids.length > 0) {
+                    btn.classList.remove('hidden');
+                    btn.innerText = `Bulk Edit (${passes.selectedUids.length})`;
+                } else {
+                    btn.classList.add('hidden');
+                }
+            },
+            openBulkEdit: () => {
+                document.getElementById('bulk-edit-count').innerText = `Editing ${passes.selectedUids.length} selected primary participants`;
+                
+                const teamOptions = '<option value="">-- No Change --</option><option value="Individual">Individual</option>' + DB.teams.map(t => `<option value="${t}">${t}</option>`).join('');
+                document.getElementById('bulk-team').innerHTML = teamOptions;
+                
+                document.getElementById('bulk-role').value = '';
+                document.getElementById('bulk-validity').value = '';
+                document.getElementById('bulk-payment').value = '';
+
+                document.getElementById('modal-bulk-edit').style.display = 'flex';
+            },
+            closeBulkEdit: () => {
+                document.getElementById('modal-bulk-edit').style.display = 'none';
+            },
+            applyBulkEdit: () => {
+                const team = document.getElementById('bulk-team').value;
+                const role = document.getElementById('bulk-role').value;
+                const validity = document.getElementById('bulk-validity').value;
+                const payment = document.getElementById('bulk-payment').value;
+                
+                if(!team && !role && !validity && !payment) {
+                    ui.notify("No changes selected.");
+                    passes.closeBulkEdit();
+                    return;
+                }
+
+                if(confirm(`Apply these changes to ${passes.selectedUids.length} participants?`)) {
+                    passes.selectedUids.forEach(uid => {
+                        const p = DB.passes.find(x => x.uid === uid);
+                        if(p) {
+                            if(team) p.team = team;
+                            if(role) {
+                                p.role = role;
+                                if (role === 'Player' && (!p.guests || p.guests.length === 0)) {
+                                    p.guests = [
+                                        { name: null, uid: system.generateUID('G') },
+                                        { name: null, uid: system.generateUID('G') }
+                                    ];
+                                } else if (role !== 'Player') {
+                                    p.guests = [];
+                                }
+                            }
+                            if(validity) p.validity = validity;
+                            if(payment) p.paymentStatus = payment;
+                            
+                            if(role === 'Spectator' || p.role === 'Spectator') {
+                               if(p.paymentStatus !== 'Free') p.price = DB.config.spectatorPrice;
+                               else p.price = 0;
+                            } else {
+                               p.price = 0;
+                               if (role && !payment) p.paymentStatus = 'N/A';
+                            }
+                        }
+                    });
+
+                    system.save();
+                    passes.selectedUids = [];
+                    const sa = document.getElementById('selectAllCheckbox');
+                    if(sa) sa.checked = false;
+                    passes.updateBulkEditButton();
+                    passes.closeBulkEdit();
+                    ui.notify("Bulk Edit Applied");
+                }
+            },
+            bulkRevoke: () => {
+                if(confirm(`Are you absolutely sure you want to REVOKE access for ${passes.selectedUids.length} participants? This cannot be undone.`)) {
+                    DB.passes = DB.passes.filter(p => !passes.selectedUids.includes(p.uid));
+                    system.save();
+                    passes.selectedUids = [];
+                    const sa = document.getElementById('selectAllCheckbox');
+                    if(sa) sa.checked = false;
+                    passes.updateBulkEditButton();
+                    passes.closeBulkEdit();
+                    ui.notify("Selected participants revoked");
+                }
+            },
             updateUIVisibility: () => {
                 const role = document.getElementById('reg-role').value;
                 const paymentDropdown = document.getElementById('reg-payment');
@@ -2700,6 +2878,9 @@
 
                 document.getElementById('pass-table-body').innerHTML = renderItems.map(p => `
                     <tr class="group border-b border-white/5">
+                        <td class="px-4 py-4 md:py-6 text-center">
+                            ${!p.isGuest ? `<input type="checkbox" class="row-checkbox w-4 h-4 accent-gold cursor-pointer" value="${p.uid}" onchange="passes.toggleSelect('${p.uid}', this)" ${passes.selectedUids && passes.selectedUids.includes(p.uid) ? 'checked' : ''}>` : ''}
+                        </td>
                         <td class="px-6 md:px-8 py-4 md:py-6">
                             <div class="flex flex-col">
                                 <span class="text-white font-black text-[12px] md:text-[13px] uppercase">${p.name}</span>
@@ -2723,6 +2904,9 @@
                         </td>
                     </tr>
                 `).join('');
+
+                const sa = document.getElementById('selectAllCheckbox');
+                if (sa && (passes.selectedUids?.length === 0 || !passes.selectedUids)) sa.checked = false;
 
                 const listCountEl = document.getElementById('list-count');
                 if (listCountEl) listCountEl.innerText = `${renderItems.length} TOTAL`;
